@@ -2,22 +2,59 @@
 const container = document.getElementById('quiz-container');
 let current = 0;
 let answered = false;
+let wrongList = [];
+let reviewMode = false;
+let reviewIdx = 0;
 
 function renderQuestion(idx) {
   answered = false;
-  const q = quizData[idx];
-  let html = `<div class="progress">第${idx+1}题 / 共${quizData.length}题</div>`;
+  const q = reviewMode ? quizData[wrongList[idx]] : quizData[idx];
+  let html = `<div class="progress">${reviewMode ? `错题第${idx+1}题 / 共${wrongList.length}题` : `第${idx+1}题 / 共${quizData.length}题`}</div>`;
   if (q.type === 'info') {
     html += `<div class="question-title" style="color:#2563eb;text-align:center;font-size:1.15em;">${q.info}</div>`;
     html += '<button id="next-btn">进入下一题</button>';
     container.innerHTML = html;
     document.getElementById('next-btn').onclick = function() {
-      if (current < quizData.length-1) {
-        current++;
-        renderQuestion(current);
+      if (reviewMode) {
+        if (reviewIdx < wrongList.length-1) {
+          reviewIdx++;
+          renderQuestion(reviewIdx);
+        } else {
+          showEnd();
+        }
       } else {
-        showEnd();
+        if (current < quizData.length-1) {
+          current++;
+          renderQuestion(current);
+        } else {
+          showEnd();
+        }
       }
+    };
+    return;
+  }
+  if (q.type === 'fill') {
+    let blanks = Array.isArray(q.answer) ? q.answer.length : 1;
+    let blankIdx = 0;
+    let questionHTML = q.question.replace(/_{2,}/g, function() {
+      let html = '';
+      if (blankIdx < blanks) {
+        html = `<input type="text" name="blank${blankIdx}" placeholder="请填写第${blankIdx+1}空" style="display:inline-block;width:80px;margin:0 4px;">`;
+      } else {
+        html = '____';
+      }
+      blankIdx++;
+      return html;
+    });
+    html += `<div class="question-title">${questionHTML}</div>`;
+    html += '<form id="quiz-form">';
+    html += '<button type="submit" id="submit-btn">提交</button>';
+    html += '</form>';
+    html += '<div id="feedback"></div>';
+    container.innerHTML = html;
+    document.getElementById('quiz-form').onsubmit = function(e) {
+      e.preventDefault();
+      if (!answered) checkAnswer(q);
     };
     return;
   }
@@ -40,11 +77,6 @@ function renderQuestion(idx) {
     html += `<label class="option-label"><input type="radio" name="opt" value="true"> 正确</label>`;
     html += `<label class="option-label"><input type="radio" name="opt" value="false"> 错误</label>`;
     html += '</div>';
-  } else if (q.type === 'fill') {
-    const blanks = Array.isArray(q.answer) ? q.answer.length : 1;
-    for (let i = 0; i < blanks; i++) {
-      html += `<input type="text" name="blank${i}" placeholder="请填写第${i+1}空">`;
-    }
   }
   html += '<button type="submit" id="submit-btn">提交</button>';
   html += '</form>';
@@ -95,17 +127,41 @@ function checkAnswer(q) {
   feedback += `<button id="next-btn">下一题</button>`;
   document.getElementById('feedback').innerHTML = feedback;
   document.getElementById('next-btn').onclick = function() {
-    if (current < quizData.length-1) {
-      current++;
-      renderQuestion(current);
+    if (reviewMode) {
+      if (reviewIdx < wrongList.length-1) {
+        reviewIdx++;
+        renderQuestion(reviewIdx);
+      } else {
+        showEnd();
+      }
     } else {
-      showEnd();
+      if (current < quizData.length-1) {
+        current++;
+        renderQuestion(current);
+      } else {
+        showEnd();
+      }
     }
   };
+  // 错题收集
+  if (!correct && !reviewMode) {
+    if (!wrongList.includes(current)) wrongList.push(current);
+  }
 }
 
 function showEnd() {
-  container.innerHTML = `<div class="question-title">答题结束！</div><div style="margin:24px 0;">感谢您的作答，可刷新页面重新开始。</div>`;
+  let html = `<div class="question-title">答题结束！</div><div style="margin:24px 0;">感谢您的作答，可刷新页面重新开始。</div>`;
+  if (!reviewMode && wrongList.length > 0) {
+    html += `<button id="review-btn" style="background:#f59e42;">错题重做（${wrongList.length}题）</button>`;
+  }
+  container.innerHTML = html;
+  if (!reviewMode && wrongList.length > 0) {
+    document.getElementById('review-btn').onclick = function() {
+      reviewMode = true;
+      reviewIdx = 0;
+      renderQuestion(reviewIdx);
+    };
+  }
 }
 
 // 初始化
