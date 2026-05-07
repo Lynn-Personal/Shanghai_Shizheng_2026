@@ -7,6 +7,23 @@ let reviewMode = false;
 let reviewIdx = 0;
 let reviewWrongList = []; // indices into wrongList that were wrong again during review
 
+function getJudgeOptions(q) {
+  return Array.isArray(q.options) && q.options.length === 2 ? q.options : ['正确', '错误'];
+}
+
+function normalizeJudgeAnswerIndex(q) {
+  // New format: answer is [index]. Legacy format may encode 1=true / 0=false with no options.
+  if (Array.isArray(q.answer) && typeof q.answer[0] === 'number') {
+    if (Array.isArray(q.options) && q.options.length === 2) return q.answer[0];
+    const boolVal = q.answer[0] === 1;
+    return boolVal ? 0 : 1;
+  }
+  if (typeof q.answer === 'boolean') {
+    return q.answer ? 0 : 1;
+  }
+  return 0;
+}
+
 function renderQuestion(idx) {
   answered = false;
   const q = reviewMode ? quizData[wrongList[idx]] : quizData[idx];
@@ -78,9 +95,11 @@ function renderQuestion(idx) {
     });
     html += '</div>';
   } else if (q.type === 'judge') {
+    const opts = getJudgeOptions(q);
     html += '<div class="options">';
-    html += `<label class="option-label"><input type="radio" name="opt" value="true"> 正确</label>`;
-    html += `<label class="option-label"><input type="radio" name="opt" value="false"> 错误</label>`;
+    opts.forEach((opt, i) => {
+      html += `<label class="option-label"><input type="radio" name="opt" value="${i}"> ${opt}</label>`;
+    });
     html += '</div>';
   }
   html += '<button type="submit" id="submit-btn">提交</button>';
@@ -136,7 +155,11 @@ function checkAnswerEmpty(q) {
   recordWrong();
   let correctLabel = '';
   if (q.type === 'single' || q.type === 'multiple') correctLabel = q.answer.map(i => q.options[i]).join('，');
-  else if (q.type === 'judge') correctLabel = q.answer ? '正确' : '错误';
+  else if (q.type === 'judge') {
+    const opts = getJudgeOptions(q);
+    const ansIdx = normalizeJudgeAnswerIndex(q);
+    correctLabel = opts[ansIdx];
+  }
   else if (q.type === 'fill') correctLabel = q.answer.join('，');
   showFeedbackAndNext(false, correctLabel, q.explanation || '');
 }
@@ -147,8 +170,13 @@ function checkAnswer(q) {
   if (q.type === 'single' || q.type === 'judge') {
     const sel = document.querySelector('input[name="opt"]:checked');
     if (!sel) { checkAnswerEmpty(q); return; }
-    userAns = q.type === 'judge' ? (sel.value === 'true') : [parseInt(sel.value)];
-    correct = q.type === 'judge' ? (userAns === q.answer) : (userAns[0] === q.answer[0]);
+    userAns = [parseInt(sel.value)];
+    if (q.type === 'judge') {
+      const judgeAnsIdx = normalizeJudgeAnswerIndex(q);
+      correct = userAns[0] === judgeAnsIdx;
+    } else {
+      correct = userAns[0] === q.answer[0];
+    }
   } else if (q.type === 'multiple') {
     const checked = Array.from(document.querySelectorAll('input[name="opt"]:checked')).map(x=>parseInt(x.value));
     if (checked.length === 0) { checkAnswerEmpty(q); return; }
@@ -172,7 +200,11 @@ function checkAnswer(q) {
   if (!correct) recordWrong();
   let correctLabel = '';
   if (q.type === 'single' || q.type === 'multiple') correctLabel = q.answer.map(i=>q.options[i]).join('，');
-  else if (q.type === 'judge') correctLabel = q.answer ? '正确' : '错误';
+  else if (q.type === 'judge') {
+    const opts = getJudgeOptions(q);
+    const ansIdx = normalizeJudgeAnswerIndex(q);
+    correctLabel = opts[ansIdx];
+  }
   else if (q.type === 'fill') correctLabel = q.answer.join('，');
   showFeedbackAndNext(correct, correctLabel, q.explanation || '');
 }

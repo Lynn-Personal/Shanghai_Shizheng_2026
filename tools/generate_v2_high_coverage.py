@@ -84,30 +84,26 @@ def generate_theme_v2(gen, theme: str):
 
     preferred_specs = filter_specs(gen, theme, gap_specs)
 
-    # Phase 1: build 40 fill questions, preferring unique KP coverage.
+    # Phase 1: build fill questions from all suitable specs (no fixed 40 cap).
     fill_qs: list[dict] = []
     used_fill = set()
     used_kps = set()
     for spec in preferred_specs + gap_specs:
         q = gen.make_fill(spec)
+        if not q:
+            continue
         k = fill_key(q)
         if k in used_fill:
             continue
         fill_qs.append(q)
         used_fill.add(k)
         used_kps.add(spec["kp"])
-        if len(fill_qs) >= 40:
-            break
 
-    # Phase 2: build 40 single-choice questions with new KPs first.
+    # Phase 2: build single-choice questions from all specs with new KPs first.
     single_qs: list[dict] = []
     used_single = set()
     ordered_single_specs = sorted(preferred_specs + gap_specs, key=lambda s: (s["kp"] in used_kps,))
-    idx = 0
-    attempts = 0
-    max_attempts = max(400, len(ordered_single_specs) * 30)
-    while len(single_qs) < 40 and attempts < max_attempts:
-        spec = ordered_single_specs[idx % len(ordered_single_specs)]
+    for spec in ordered_single_specs:
         cand = gen.make_single(spec, gap_specs)
         if cand:
             k = single_key(cand)
@@ -115,30 +111,43 @@ def generate_theme_v2(gen, theme: str):
                 single_qs.append(cand)
                 used_single.add(k)
                 used_kps.add(spec["kp"])
-        idx += 1
-        attempts += 1
 
-    # Phase 3: build 20 multiple-choice questions (covers two KPs each).
+    # Phase 3: build multiple-choice questions (covers two KPs each), not capped at 20.
     multiple_qs: list[dict] = []
     used_multiple = set()
     ordered_multi_specs = sorted(preferred_specs + gap_specs, key=lambda s: (s["kp"] in used_kps,))
-    idx = 0
-    attempts = 0
-    max_attempts = max(500, len(ordered_multi_specs) * 50)
-    while len(multiple_qs) < 20 and attempts < max_attempts:
-        a = ordered_multi_specs[idx % len(ordered_multi_specs)]
-        b = ordered_multi_specs[(idx + 1) % len(ordered_multi_specs)]
-        if a["kp"] != b["kp"]:
-            cand = gen.make_multiple(a, b, gap_specs)
-            if cand:
-                k = multiple_key(cand)
-                if k not in used_multiple:
-                    multiple_qs.append(cand)
-                    used_multiple.add(k)
-                    used_kps.add(a["kp"])
-                    used_kps.add(b["kp"])
-        idx += 2
-        attempts += 1
+    for idx in range(0, len(ordered_multi_specs) - 1, 2):
+        a = ordered_multi_specs[idx]
+        b = ordered_multi_specs[idx + 1]
+        if a["kp"] == b["kp"]:
+            continue
+        cand = gen.make_multiple(a, b, gap_specs)
+        if not cand:
+            continue
+        k = multiple_key(cand)
+        if k in used_multiple:
+            continue
+        multiple_qs.append(cand)
+        used_multiple.add(k)
+        used_kps.add(a["kp"])
+        used_kps.add(b["kp"])
+
+    # A second pass with shifted pairs adds variety when possible.
+    for idx in range(1, len(ordered_multi_specs) - 1, 2):
+        a = ordered_multi_specs[idx]
+        b = ordered_multi_specs[idx + 1]
+        if a["kp"] == b["kp"]:
+            continue
+        cand = gen.make_multiple(a, b, gap_specs)
+        if not cand:
+            continue
+        k = multiple_key(cand)
+        if k in used_multiple:
+            continue
+        multiple_qs.append(cand)
+        used_multiple.add(k)
+        used_kps.add(a["kp"])
+        used_kps.add(b["kp"])
 
     # Phase 4: judge questions.
     # Keep at least 20 for exam shape; then append uncovered KPs to push coverage near 100%.

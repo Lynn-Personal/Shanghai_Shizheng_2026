@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import re
 from pathlib import Path
 
@@ -542,8 +543,43 @@ def simplify_answer(answer: str) -> str:
     return answer if len(answer) >= 2 else answer
 
 
-def make_fill(spec: dict) -> dict:
-    simplified = simplify_answer(spec["answer"])
+def compact_fill_answer(answer: str) -> str | None:
+    """Keep fill answers short (<=6 chars); return None when not suitable for fill."""
+    simplified = simplify_answer(answer)
+    if len(simplified) <= 6:
+        return simplified
+
+    # Prefer short quoted terms if present.
+    quote_match = re.search(r"[“\"]([^”\"]{2,6})[”\"]", simplified)
+    if quote_match:
+        return quote_match.group(1)
+
+    # Prefer first segment for list-like answers if concise.
+    for sep in ["、", ",", "，", "和", "及"]:
+        parts = [p.strip() for p in simplified.split(sep) if p.strip()]
+        if parts and 2 <= len(parts[0]) <= 6:
+            return parts[0]
+
+    # If still too long, do not use as fill answer.
+    return None
+
+
+def stable_shuffle(options: list[str], key: str) -> tuple[list[str], list[int]]:
+    """Return shuffled options and index mapping from original index -> new index."""
+    order = list(range(len(options)))
+    rnd = random.Random(key)
+    rnd.shuffle(order)
+    shuffled = [options[i] for i in order]
+    old_to_new = [0] * len(options)
+    for new_idx, old_idx in enumerate(order):
+        old_to_new[old_idx] = new_idx
+    return shuffled, old_to_new
+
+
+def make_fill(spec: dict) -> dict | None:
+    simplified = compact_fill_answer(spec["answer"])
+    if not simplified:
+        return None
     return {
         "type": "fill",
         "question": spec["question"],
@@ -599,11 +635,12 @@ def make_single(spec: dict, specs: list[dict]) -> dict | None:
     options = [spec["answer"]] + distractors
     if len(set(options)) < 4:
         return None
+    shuffled, old_to_new = stable_shuffle(options, spec["kp"] + "|single")
     return {
         "type": "single",
         "question": stem,
-        "options": options,
-        "answer": [0],
+        "options": shuffled,
+        "answer": [old_to_new[0]],
         "explanation": f"正确项对应材料考点：{spec['kp']}。",
     }
 
@@ -646,11 +683,12 @@ def make_multiple(spec1: dict, spec2: dict, specs: list[dict]) -> dict | None:
     options = [spec1["answer"], spec2["answer"], wrong_pool[0], wrong_pool[1]]
     if len(set(options)) < 4:
         return None
+    shuffled, old_to_new = stable_shuffle(options, spec1["kp"] + "|" + spec2["kp"] + "|multiple")
     return {
         "type": "multiple",
         "question": stem,
-        "options": options,
-        "answer": [0, 1],
+        "options": shuffled,
+        "answer": sorted([old_to_new[0], old_to_new[1]]),
         "explanation": f"正确项对应材料考点：{spec1['kp']}；{spec2['kp']}。",
     }
 
@@ -659,10 +697,13 @@ def make_judge(kp: str, sent: str) -> dict:
     s = clean_text(sent)
     if len(s) < 10:
         s = kp
+    options = ["正确", "错误"]
+    shuffled, old_to_new = stable_shuffle(options, kp + "|judge")
     return {
         "type": "judge",
         "question": f"{s}。（ ）",
-        "answer": [1],
+        "options": shuffled,
+        "answer": [old_to_new[0]],
         "explanation": f"该表述与材料一致，依据考点：{kp}。",
     }
 
@@ -694,7 +735,8 @@ def write_js(path: Path, fill_qs, single_qs, multiple_qs, judge_qs):
     lines.append(f"  {{ type: 'info', info: '【判断题 共{len(judge_qs)}题，每题1分】' }},")
     for q in judge_qs:
         ans = json.dumps(q["answer"], ensure_ascii=False)
-        lines.append(f"  {{ type: 'judge', question: '{esc(q['question'])}', answer: {ans}, explanation: '{esc(q['explanation'])}' }},")
+        opts = json.dumps(q.get("options", ["正确", "错误"]), ensure_ascii=False)
+        lines.append(f"  {{ type: 'judge', question: '{esc(q['question'])}', options: {opts}, answer: {ans}, explanation: '{esc(q['explanation'])}' }},")
 
     lines[-1] = lines[-1].rstrip(",")
     lines.append("];\n")
@@ -789,7 +831,13 @@ def generate_theme(theme: str):
         return out, seen
 
     # build initial
-    fill_qs = [make_fill(spec_by_kp[k]) for k in fill_seed if k in spec_by_kp]
+    fill_qs = []
+    for k in fill_seed:
+        if k not in spec_by_kp:
+            continue
+        q = make_fill(spec_by_kp[k])
+        if q:
+            fill_qs.append(q)
 
     single_qs = []
     for k in single_seed:
@@ -892,6 +940,8 @@ def generate_theme(theme: str):
                 continue
             replacement = make_fill(non_date_specs[nd_idx % len(non_date_specs)])
             nd_idx += 1
+            if not replacement:
+                continue
             qs[i] = replacement
             date_count -= 1
         return qs
@@ -968,6 +1018,8 @@ def generate_theme(theme: str):
                 continue
             replacement = make_fill(pool[nd_idx % len(pool)])
             nd_idx += 1
+            if not replacement:
+                continue
             if not fill_is_2025_date(replacement):
                 qs[i] = replacement
                 bad_count -= 1
@@ -1047,6 +1099,8 @@ def generate_theme(theme: str):
                 continue
             replacement = make_fill(pool[nd_idx % len(pool)])
             nd_idx += 1
+            if not replacement:
+                continue
             if not fill_is_leader(replacement):
                 qs[i] = replacement
                 leader_count -= 1
@@ -1127,6 +1181,10 @@ def generate_theme(theme: str):
     while len(fill_qs) < 40 and attempts < max_attempts:
         spec = pad_specs[idx % len(pad_specs)]
         q = make_fill(spec)
+        if not q:
+            idx += 1
+            attempts += 1
+            continue
         k = fill_key(q)
         if k not in fill_seen:
             fill_qs.append(q)
@@ -1202,6 +1260,10 @@ def generate_theme(theme: str):
     while len(fill_qs) < 40 and attempts < max_attempts:
         spec = pad_specs[idx % len(pad_specs)]
         q = make_fill(spec)
+        if not q:
+            idx += 1
+            attempts += 1
+            continue
         k = fill_key(q)
         if k not in fill_seen:
             fill_qs.append(q)
