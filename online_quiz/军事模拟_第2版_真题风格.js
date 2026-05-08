@@ -1,3 +1,136 @@
+function classifyChoiceCategory(text) {
+  const value = String(text || '').trim();
+  if (!value) return 'other';
+
+  if (/^(\d+)(\.\d+)?(%|万人|万余吨|吨)?$/.test(value) || /(\d{4}年)|(\d+月\d+日)/.test(value)) {
+    return 'time_number';
+  }
+  if (/(-\d{4})|行动|联演|演练|联合训练|阅兵/.test(value)) {
+    return 'operation';
+  }
+  if (/舰|战机|导弹|坦克|装甲|武器|舰载机|预警机/.test(value)) {
+    return 'equipment';
+  }
+  if (/部队|战区|海军|空军|火箭军|武警|航天|网络空间|信息支援|联勤/.test(value)) {
+    return 'organization';
+  }
+  if (/体系|技术|指挥|能力|时代|示范区|目标打击/.test(value)) {
+    return 'concept';
+  }
+  if (/中国|美国|印度|巴基斯坦|委内瑞拉|泰国|柬埔寨/.test(value)) {
+    return 'country_region';
+  }
+  return 'other';
+}
+
+function buildDistractorPools(items) {
+  const pools = {
+    time_number: [],
+    operation: [],
+    equipment: [],
+    organization: [],
+    concept: [],
+    country_region: [],
+    other: []
+  };
+
+  function addToPool(value) {
+    const text = String(value || '').trim();
+    if (!text) return;
+    const cat = classifyChoiceCategory(text);
+    if (!pools[cat].includes(text)) {
+      pools[cat].push(text);
+    }
+  }
+
+  items.forEach((q) => {
+    if (q.type === 'single' && Array.isArray(q.options) && Array.isArray(q.answer)) {
+      addToPool(q.options[q.answer[0]]);
+    }
+    if (q.type === 'fill' && Array.isArray(q.answer)) {
+      q.answer.forEach(addToPool);
+    }
+    if (q.type === 'multiple' && Array.isArray(q.options) && Array.isArray(q.answer)) {
+      q.answer.forEach((idx) => addToPool(q.options[idx]));
+    }
+  });
+
+  return pools;
+}
+
+function buildCategoryAwareDistractors(correct, originalOptions, pools, questionIndex) {
+  const correctText = String(correct || '').trim();
+  const category = classifyChoiceCategory(correctText);
+  const fallbackOrder = {
+    time_number: ['operation', 'concept', 'organization', 'equipment', 'country_region', 'other'],
+    operation: ['organization', 'concept', 'equipment', 'country_region', 'time_number', 'other'],
+    equipment: ['concept', 'organization', 'operation', 'time_number', 'country_region', 'other'],
+    organization: ['operation', 'country_region', 'concept', 'equipment', 'time_number', 'other'],
+    concept: ['equipment', 'operation', 'organization', 'time_number', 'country_region', 'other'],
+    country_region: ['organization', 'operation', 'concept', 'time_number', 'equipment', 'other'],
+    other: ['concept', 'operation', 'organization', 'equipment', 'time_number', 'country_region']
+  };
+
+  const candidates = [];
+  const used = new Set([correctText]);
+
+  function addCandidates(list) {
+    list.forEach((item) => {
+      const text = String(item || '').trim();
+      if (!text || used.has(text)) return;
+      used.add(text);
+      candidates.push(text);
+    });
+  }
+
+  addCandidates(pools[category] || []);
+  (fallbackOrder[category] || []).forEach((cat) => addCandidates(pools[cat] || []));
+
+  addCandidates((originalOptions || []).filter((opt) => String(opt || '').trim() !== correctText));
+
+  const start = candidates.length ? (questionIndex * 3) % candidates.length : 0;
+  const picked = [];
+  for (let i = 0; i < candidates.length && picked.length < 3; i += 1) {
+    picked.push(candidates[(start + i) % candidates.length]);
+  }
+
+  while (picked.length < 3) {
+    picked.push(`干扰项${questionIndex + picked.length + 1}`);
+  }
+
+  return picked;
+}
+
+function rebalanceSingleChoiceOptions(items) {
+  const pools = buildDistractorPools(items);
+  let singleIndex = 0;
+
+  items.forEach((q) => {
+    if (q.type !== 'single' || !Array.isArray(q.options) || !Array.isArray(q.answer)) {
+      return;
+    }
+
+    const correct = q.options[q.answer[0]];
+    const distractors = buildCategoryAwareDistractors(correct, q.options, pools, singleIndex);
+    const correctPos = (singleIndex * 7 + 1) % 4;
+
+    const newOptions = [];
+    let distractorCursor = 0;
+    for (let i = 0; i < 4; i += 1) {
+      if (i === correctPos) {
+        newOptions.push(correct);
+      } else {
+        newOptions.push(distractors[distractorCursor]);
+        distractorCursor += 1;
+      }
+    }
+
+    q.options = newOptions;
+    q.answer = [correctPos];
+    singleIndex += 1;
+  });
+}
+
 const quizData = [
   { type: 'info', info: '【填空题 共35题，每题2分】' },
   { type: 'fill', question: '2025年7月，中央军委主席习近平签署命令发布军事航天部队、网络空间部队、信息支援部队、联勤保障部队四支新军种的____面式样。', answer: ["军旗"], explanation: '材料对应表述：2025年7月，中央军委主席习近平签署命令发布军事航天部队、网络空间部队、信息支援部队、联勤保障部队四支新军种的军旗面式样。' },
@@ -165,3 +298,5 @@ const quizData = [
   { type: 'judge', question: '2025亚洲通用航空展吸引21个国家和地区超300家企业参展，国际展商参展比例达25%，体现国际合作趋势。（ ）', options: ["错误", "正确"], answer: [1], explanation: '该表述与材料一致，依据考点：2025亚洲通用航空展吸引21个国家和地区超300家企业参展，国际展商参展比例达25%，体现国际合作趋势。' },
   { type: 'judge', question: '联合利剑-2025。（ ）', options: ["正确", "错误"], answer: [0], explanation: '该表述与材料一致，依据考点：联合利剑-2025。' }
 ];
+
+rebalanceSingleChoiceOptions(quizData);
