@@ -3,14 +3,240 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>十五五专题模拟题在线答题</title>
-  <link rel="stylesheet" href="style.css">
+  <title>在线模拟题主入口</title>
+  <style>
+    :root {
+      --bg: #f3f6fb;
+      --panel: #ffffff;
+      --text: #10243e;
+      --muted: #5e728f;
+      --primary: #0f7bff;
+      --primary-hover: #0a63cf;
+      --border: #d7e3f4;
+      --shadow: 0 10px 24px rgba(16, 36, 62, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+      background:
+        radial-gradient(circle at 10% -20%, #dcecff 0%, transparent 55%),
+        radial-gradient(circle at 90% 120%, #d9f8ee 0%, transparent 50%),
+        var(--bg);
+      color: var(--text);
+    }
+
+    .wrap {
+      width: min(980px, 92vw);
+      margin: 32px auto 40px;
+    }
+
+    .header {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+      padding: 24px;
+      margin-bottom: 18px;
+    }
+
+    .title {
+      margin: 0;
+      font-size: 30px;
+      line-height: 1.2;
+    }
+
+    .subtitle {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .count {
+      margin-top: 14px;
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: #e9f3ff;
+      color: #0c4f9d;
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    .grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .topic {
+      margin: 0;
+      font-size: 19px;
+      font-weight: 700;
+      color: #0c3764;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: #eff6ff;
+      color: #1e4f8f;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid #d3e3fb;
+    }
+
+    .file {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .go {
+      margin-top: auto;
+      text-decoration: none;
+      text-align: center;
+      background: var(--primary);
+      color: #fff;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-weight: 700;
+      transition: background 0.2s ease;
+    }
+
+    .go:hover {
+      background: var(--primary-hover);
+    }
+
+    @media (max-width: 560px) {
+      .title {
+        font-size: 24px;
+      }
+    }
+  </style>
 </head>
 <body>
-  <div id="quiz-container">
-    <!-- 题目内容将由JS动态渲染 -->
+  <div class="wrap">
+    <section class="header">
+      <h1 class="title">在线模拟题主入口</h1>
+      <p class="subtitle">点击下方任意专题即可进入对应在线题库（包含真题风格 / 新版 / 第2版 / Kimi）。</p>
+      <span id="quiz-count" class="count"></span>
+    </section>
+
+    <section id="quiz-grid" class="grid"></section>
   </div>
-  <script src="quiz_data.js"></script>
-  <script src="main.js"></script>
+
+  <script>
+    const quizPages = [
+      "kimi_国内新闻_在线模拟.html",
+      "kimi_十五五_在线模拟.html",
+      "kimi_军事_在线模拟.html",
+      "kimi_探究性专题_在线模拟.html",
+      "kimi_国际要闻_在线模拟.html",
+      "kimi_文体_在线模拟.html",
+      "kimi_环保_在线模拟.html",
+      "kimi_科技_在线模拟.html",
+      "军事模拟_新版.html",
+      "军事模拟_第2版_真题风格.html",
+      "军事模拟_新版_真题风格.html",
+      "国际要闻模拟_新版.html",
+      "十五五模拟_第2版_真题风格.html",
+      "十五五模拟_新版_真题风格.html",
+      "十五五模拟_新版.html",
+      "探究性专题模拟_新版.html",
+      "国际要闻模拟_第2版_真题风格.html",
+      "国际要闻模拟_新版_真题风格.html",
+      "探究性专题模拟_新版_真题风格.html",
+      "探究性专题模拟_第2版_真题风格.html",
+      "文体模拟_新版.html",
+      "文体模拟_新版_真题风格.html",
+      "科技模拟_第2版_真题风格.html",
+      "科技模拟_新版_真题风格.html",
+      "科技模拟_新版.html",
+      "环保模拟_第2版_真题风格.html",
+      "环保模拟_新版_真题风格.html",
+      "环保模拟_新版.html",
+      "热点论坛模拟_新版.html",
+      "文体模拟_第2版_真题风格.html"
+    ];
+
+    const countEl = document.getElementById("quiz-count");
+    const gridEl = document.getElementById("quiz-grid");
+    countEl.textContent = `共 ${quizPages.length} 套在线模拟题`;
+
+    function getTopicFromFile(fileName) {
+      return fileName
+        .replace("kimi_", "")
+        .replace("_在线模拟", "")
+        .replace(".html", "")
+        .replace(/_/g, " ");
+    }
+
+    function getBadges(fileName) {
+      const tags = [];
+      if (fileName.includes("kimi_")) tags.push("Kimi");
+      if (fileName.includes("新版")) tags.push("新版");
+      if (fileName.includes("真题风格")) tags.push("真题风格");
+      if (fileName.includes("第2版")) tags.push("第2版");
+      if (tags.length === 0) tags.push("标准版");
+      return tags;
+    }
+
+    quizPages.forEach((fileName) => {
+      const card = document.createElement("article");
+      card.className = "card";
+
+      const topic = document.createElement("h2");
+      topic.className = "topic";
+      topic.textContent = getTopicFromFile(fileName);
+
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      getBadges(fileName).forEach((tag) => {
+        const badge = document.createElement("span");
+        badge.className = "badge";
+        badge.textContent = tag;
+        meta.appendChild(badge);
+      });
+
+      const file = document.createElement("p");
+      file.className = "file";
+      file.textContent = fileName;
+
+      const link = document.createElement("a");
+      link.className = "go";
+      link.href = fileName;
+      link.textContent = "进入答题";
+
+      card.appendChild(topic);
+      card.appendChild(meta);
+      card.appendChild(file);
+      card.appendChild(link);
+      gridEl.appendChild(card);
+    });
+  </script>
 </body>
 </html>

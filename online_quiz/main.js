@@ -24,6 +24,15 @@ function normalizeJudgeAnswerIndex(q) {
   return 0;
 }
 
+function getJudgeCorrectLabel(q) {
+  if (typeof q.correctAnswerText === 'string' && q.correctAnswerText.trim()) {
+    return q.correctAnswerText.trim();
+  }
+  const opts = getJudgeOptions(q);
+  const ansIdx = normalizeJudgeAnswerIndex(q);
+  return opts[ansIdx];
+}
+
 function renderQuestion(idx) {
   answered = false;
   const q = reviewMode ? quizData[wrongList[idx]] : quizData[idx];
@@ -156,9 +165,7 @@ function checkAnswerEmpty(q) {
   let correctLabel = '';
   if (q.type === 'single' || q.type === 'multiple') correctLabel = q.answer.map(i => q.options[i]).join('，');
   else if (q.type === 'judge') {
-    const opts = getJudgeOptions(q);
-    const ansIdx = normalizeJudgeAnswerIndex(q);
-    correctLabel = opts[ansIdx];
+    correctLabel = getJudgeCorrectLabel(q);
   }
   else if (q.type === 'fill') correctLabel = q.answer.join('，');
   showFeedbackAndNext(false, correctLabel, q.explanation || '');
@@ -201,9 +208,7 @@ function checkAnswer(q) {
   let correctLabel = '';
   if (q.type === 'single' || q.type === 'multiple') correctLabel = q.answer.map(i=>q.options[i]).join('，');
   else if (q.type === 'judge') {
-    const opts = getJudgeOptions(q);
-    const ansIdx = normalizeJudgeAnswerIndex(q);
-    correctLabel = opts[ansIdx];
+    correctLabel = getJudgeCorrectLabel(q);
   }
   else if (q.type === 'fill') correctLabel = q.answer.join('，');
   showFeedbackAndNext(correct, correctLabel, q.explanation || '');
